@@ -31,36 +31,33 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    const normalized = origin.replace(/\/$/, '');
-    const isAllowed = allowedOrigins.some(allowed => allowed.replace(/\/$/, '') === normalized) 
-      || normalized.endsWith('.vercel.app');
-    if (isAllowed || process.env.NODE_ENV !== 'production') {
-      return callback(null, true);
-    }
-    return callback(null, true);
+    // Dynamically echo back requesting origin for Vercel, localhost, or any configured client
+    callback(null, true);
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 app.use(express.json({ limit: '5mb' }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-app.get('/api/health', (req, res) => {
+app.get(['/api/health', '/health'], (req, res) => {
   res.json({ success: true, message: 'CareConnect API is live 🚀', timestamp: new Date().toISOString() });
 });
 
-app.use('/api/auth', authRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/providers', providerRoutes);
-app.use('/api/requests', requestRoutes);
-app.use('/api/quotes', quoteRoutes);
-app.use('/api/bookings', bookingRoutes);
-app.use('/api/invoices', invoiceRoutes);
-app.use('/api/reviews', reviewRoutes);
-app.use('/api/disputes', disputeRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/analytics', analyticsRoutes);
+// Support both /api/path and /path so requests work regardless of frontend baseURL configuration
+app.use(['/api/auth', '/auth'], authRoutes);
+app.use(['/api/categories', '/categories'], categoryRoutes);
+app.use(['/api/providers', '/providers'], providerRoutes);
+app.use(['/api/requests', '/requests'], requestRoutes);
+app.use(['/api/quotes', '/quotes'], quoteRoutes);
+app.use(['/api/bookings', '/bookings'], bookingRoutes);
+app.use(['/api/invoices', '/invoices'], invoiceRoutes);
+app.use(['/api/reviews', '/reviews'], reviewRoutes);
+app.use(['/api/disputes', '/disputes'], disputeRoutes);
+app.use(['/api/notifications', '/notifications'], notificationRoutes);
+app.use(['/api/admin', '/admin'], adminRoutes);
+app.use(['/api/analytics', '/analytics'], analyticsRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
