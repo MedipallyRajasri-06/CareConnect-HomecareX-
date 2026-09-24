@@ -74,7 +74,7 @@ point `MONGODB_URI` in `.env` at it.
 cd frontend
 cp .env.example .env       # VITE_API_URL should point at the backend above
 npm install
-npm run dev                  # starts the app on http://localhost:5173
+npm run dev                  # starts the app on http://localhost:5174
 ```
 
 ### Demo logins (after `npm run seed`, password `password123` for all)
