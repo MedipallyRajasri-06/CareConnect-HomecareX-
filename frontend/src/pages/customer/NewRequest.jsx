@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { requests as requestsApi, categories as categoriesApi } from '../../lib/endpoints';
 import { useToast } from '../../context/ToastContext';
 import { Card, Button, Input, Textarea, Select, Spinner } from '../../components/ui';
+import MediaUpload from '../../components/MediaUpload';
 import { Sparkles, CheckCircle2, ArrowRight } from 'lucide-react';
 
 export default function NewRequest() {
@@ -10,6 +11,7 @@ export default function NewRequest() {
     rawDescription: '', urgency: 'normal', city: '', state: '', zip: '', line1: '',
     preferredDate: '', preferredTimeWindow: '', budgetMax: '',
   });
+  const [media, setMedia] = useState([]);
   const [categories, setCategories] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null); // { data, ai }
@@ -35,6 +37,8 @@ export default function NewRequest() {
         preferredDate: form.preferredDate || undefined,
         preferredTimeWindow: form.preferredTimeWindow,
         budgetMax: form.budgetMax ? Number(form.budgetMax) : undefined,
+        media: media.length > 0 ? media : undefined,
+        photos: media.map((m) => m.url),
       };
       const res = await requestsApi.create(payload);
       setResult(res);
@@ -126,6 +130,9 @@ export default function NewRequest() {
             value={form.rawDescription}
             onChange={set('rawDescription')}
           />
+
+          <MediaUpload media={media} onChange={setMedia} />
+
           <div className="grid sm:grid-cols-2 gap-4">
             <Select label="Urgency" value={form.urgency} onChange={set('urgency')}>
               <option value="low">Low — whenever convenient</option>

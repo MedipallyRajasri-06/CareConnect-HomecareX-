@@ -20,7 +20,17 @@ const serviceRequestSchema = new mongoose.Schema(
     preferredDate: { type: Date },
     preferredTimeWindow: { type: String }, // "morning" | "09:00-12:00" free text
     budgetMax: { type: Number },
-    photos: [{ type: String }], // urls
+    photos: [{ type: String }], // urls (photo/video URLs for backward compatibility)
+    media: [
+      {
+        url: { type: String, required: true },
+        type: { type: String, enum: ['photo', 'video'], default: 'photo' },
+        name: { type: String, default: '' },
+      },
+    ],
+    preferredProvider: { type: mongoose.Schema.Types.ObjectId, ref: 'ProviderProfile' },
+    isRepeatBooking: { type: Boolean, default: false },
+    originalBooking: { type: mongoose.Schema.Types.ObjectId, ref: 'Booking' },
     status: {
       type: String,
       enum: [
@@ -41,6 +51,8 @@ const serviceRequestSchema = new mongoose.Schema(
       {
         provider: { type: mongoose.Schema.Types.ObjectId, ref: 'ProviderProfile' },
         score: Number,
+        badges: [String],
+        distanceKm: Number,
         reasons: [String],
         ratingAverage: Number,
         completedJobs: Number,

@@ -2,6 +2,7 @@ const Invoice = require('../models/Invoice');
 const ProviderProfile = require('../models/ProviderProfile');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
+const { notify } = require('../services/notificationService');
 
 // @route GET /api/invoices
 const listInvoices = asyncHandler(async (req, res) => {
@@ -33,7 +34,7 @@ const getInvoice = asyncHandler(async (req, res) => {
 
 // @route PUT /api/invoices/:id/pay  (mock payment)
 const markPaid = asyncHandler(async (req, res) => {
-  const invoice = await Invoice.findById(req.params.id);
+  const invoice = await Invoice.findById(req.params.id).populate('provider');
   if (!invoice) throw new ApiError(404, 'Invoice not found.');
   if (String(invoice.customer) !== String(req.user._id) && !['admin', 'operations_manager'].includes(req.user.role)) {
     throw new ApiError(403, 'Not authorized.');
@@ -41,6 +42,26 @@ const markPaid = asyncHandler(async (req, res) => {
   invoice.status = 'paid';
   invoice.paidAt = new Date();
   await invoice.save();
+
+  // Send real-time payment notifications
+  await notify({
+    user: invoice.customer,
+    type: 'payment_completed',
+    title: 'Payment Successful! 💳',
+    message: `Your payment of ₹${invoice.total} for Invoice #${invoice.invoiceNumber} was successfully processed.`,
+    link: `/customer/invoices/${invoice._id}`,
+  });
+
+  if (invoice.provider?.user) {
+    await notify({
+      user: invoice.provider.user,
+      type: 'payment_completed',
+      title: 'Payment Received! 💰',
+      message: `Payment of ₹${invoice.subtotal} has been credited for Invoice #${invoice.invoiceNumber}.`,
+      link: `/provider/earnings`,
+    });
+  }
+
   res.json({ success: true, data: invoice });
 });
 

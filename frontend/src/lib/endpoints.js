@@ -3,6 +3,7 @@ import api, { unwrap } from './api';
 export const auth = {
   register: (payload) => unwrap(api.post('/auth/register', payload)),
   login: (payload) => unwrap(api.post('/auth/login', payload)),
+  google: (payload) => unwrap(api.post('/auth/google', payload)),
   me: () => unwrap(api.get('/auth/me')),
   updateMe: (payload) => unwrap(api.put('/auth/me', payload)),
   changePassword: (payload) => unwrap(api.put('/auth/password', payload)),
@@ -18,6 +19,7 @@ export const categories = {
 
 export const providers = {
   list: (params) => unwrap(api.get('/providers', { params })),
+  recommendations: (params) => unwrap(api.get('/providers/recommendations', { params })),
   me: () => unwrap(api.get('/providers/me')),
   get: (id) => unwrap(api.get(`/providers/${id}`)),
   updateMe: (payload) => unwrap(api.put('/providers/me', payload)),
@@ -50,6 +52,10 @@ export const bookings = {
   list: (params) => unwrap(api.get('/bookings', { params })),
   get: (id) => unwrap(api.get(`/bookings/${id}`)),
   updateStatus: (id, payload) => unwrap(api.put(`/bookings/${id}/status`, payload)),
+  updateTracking: (id, payload) => unwrap(api.put(`/bookings/${id}/tracking`, payload)),
+  claimWarranty: (id, payload) => unwrap(api.post(`/bookings/${id}/warranty-claim`, payload)),
+  maskedCall: (id) => unwrap(api.post(`/bookings/${id}/masked-call`)),
+  repeat: (id, payload) => unwrap(api.post(`/bookings/${id}/repeat`, payload)),
   confirm: (id) => unwrap(api.put(`/bookings/${id}/confirm`)),
   cancel: (id, reason) => unwrap(api.put(`/bookings/${id}/cancel`, { reason })),
   review: (bookingId, payload) => unwrap(api.post(`/bookings/${bookingId}/review`, payload)),

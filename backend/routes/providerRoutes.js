@@ -1,6 +1,7 @@
 const express = require('express');
 const {
   listProviders,
+  getSmartRecommendations,
   getMyProfile,
   getProvider,
   updateMyProfile,
@@ -15,6 +16,7 @@ const { protect, authorize } = require('../middleware/auth');
 const router = express.Router();
 
 router.get('/', protect, listProviders);
+router.get('/recommendations', protect, getSmartRecommendations);
 router.get('/me', protect, authorize('provider'), getMyProfile);
 router.put('/me', protect, authorize('provider'), updateMyProfile);
 router.post('/me/documents', protect, authorize('provider'), addDocument);

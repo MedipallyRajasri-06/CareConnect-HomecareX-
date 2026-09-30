@@ -150,8 +150,50 @@ const removeAvailabilitySlot = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Slot removed.' });
 });
 
+// @route GET /api/providers/recommendations (Smart Professional Matching)
+const getSmartRecommendations = asyncHandler(async (req, res) => {
+  const aiService = require('../services/aiService');
+  const { category, city, zip, service } = req.query;
+  const candidateFilter = {
+    verificationStatus: 'verified',
+    isOnline: true,
+  };
+  if (category) {
+    candidateFilter.categories = category;
+  }
+
+  let candidates = await ProviderProfile.find(candidateFilter)
+    .populate('user', 'name avatarColor email phone')
+    .populate('categories', 'name icon basePrice');
+
+  if (candidates.length === 0) {
+    candidates = await ProviderProfile.find({ verificationStatus: 'verified' })
+      .populate('user', 'name avatarColor email phone')
+      .populate('categories', 'name icon basePrice')
+      .limit(10);
+  }
+
+  const dummyRequest = {
+    category,
+    rawDescription: service || '',
+    location: { city, zip },
+  };
+
+  const ranked = aiService.rankProviders(dummyRequest, candidates);
+  const enriched = ranked.map((r) => {
+    const prof = candidates.find((c) => String(c._id) === String(r.provider));
+    return {
+      ...r,
+      profile: prof,
+    };
+  });
+
+  res.json({ success: true, data: enriched });
+});
+
 module.exports = {
   listProviders,
+  getSmartRecommendations,
   getMyProfile,
   getProvider,
   updateMyProfile,

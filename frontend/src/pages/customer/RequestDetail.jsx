@@ -5,7 +5,8 @@ import { requests as requestsApi, quotes as quotesApi } from '../../lib/endpoint
 import { useToast } from '../../context/ToastContext';
 import { Card, Button, Spinner, EmptyState, Modal, Input, Avatar } from '../../components/ui';
 import StatusBadge from '../../components/StatusBadge';
-import { Sparkles, MapPin, Calendar, IndianRupee, Star, ShieldCheck, MessageSquare, Info } from 'lucide-react';
+import { Sparkles, MapPin, Calendar, IndianRupee, Star, ShieldCheck, MessageSquare, Info, Camera, Video, Play, Image as ImageIcon, RotateCcw } from 'lucide-react';
+import SmartMatchingCard from '../../components/SmartMatchingCard';
 import { format } from 'date-fns';
 
 export default function CustomerRequestDetail() {
@@ -83,6 +84,20 @@ export default function CustomerRequestDetail() {
         </div>
       </div>
 
+      {request.isRepeatBooking && (
+        <div className="flex items-center gap-3 p-3.5 bg-gradient-to-r from-amber-50 to-orange-50/50 border border-amber-200/90 rounded-2xl text-xs text-amber-900 shadow-xs">
+          <div className="p-2 rounded-xl bg-amber-100 text-[#925611]">
+            <RotateCcw size={16} />
+          </div>
+          <div>
+            <p className="font-bold text-navy-900">Repeat Booking Fast-Track</p>
+            <p className="text-[11px] text-amber-800 mt-0.5">
+              Targeted to your preferred provider {request.preferredProvider?.user?.name ? <strong>{request.preferredProvider.user.name}</strong> : ''}.
+            </p>
+          </div>
+        </div>
+      )}
+
       <Card className="p-5">
         <div className="grid sm:grid-cols-3 gap-4 text-sm">
           <div className="flex items-start gap-2">
@@ -113,6 +128,43 @@ export default function CustomerRequestDetail() {
         </div>
       </Card>
 
+      {/* Customer Problem Photos & Videos Gallery */}
+      {((request.media && request.media.length > 0) || (request.photos && request.photos.length > 0)) && (
+        <Card className="p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <Camera size={16} className="text-[#D98C2B]" />
+            <h3 className="text-sm font-bold text-navy-900">Problem Photos & Videos Attached</h3>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {(request.media && request.media.length > 0
+              ? request.media
+              : (request.photos || []).map((p) => ({ url: p, type: p.includes('.mp4') || p.includes('video') ? 'video' : 'photo' }))
+            ).map((m, idx) => (
+              <div
+                key={idx}
+                className="relative rounded-xl overflow-hidden border border-slate-200 aspect-video bg-slate-900 group shadow-xs"
+              >
+                {m.type === 'video' ? (
+                  <video src={m.url} controls className="w-full h-full object-cover" />
+                ) : (
+                  <a href={m.url} target="_blank" rel="noreferrer" className="block w-full h-full">
+                    <img
+                      src={m.url}
+                      alt={`Problem attachment ${idx + 1}`}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                    />
+                  </a>
+                )}
+                <span className="absolute bottom-1.5 left-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-black/60 text-white backdrop-blur-xs flex items-center gap-1">
+                  {m.type === 'video' ? <Video size={10} className="text-amber-400" /> : <ImageIcon size={10} className="text-emerald-400" />}
+                  {m.type === 'video' ? 'Video' : 'Photo'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {['classified'].includes(request.status) && (
         <Card className="p-5 flex items-center justify-between">
           <div>
@@ -126,82 +178,9 @@ export default function CustomerRequestDetail() {
       )}
 
       {rankedProviders.length > 0 && (
-        <Card>
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-            <div>
-              <h2 className="font-display font-semibold text-sm text-navy-900">AI-ranked provider matches</h2>
-              <p className="text-xs text-muted mt-0.5">Matched and ordered by skill fit, rating, and verified track record.</p>
-            </div>
-            <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-              {rankedProviders.length} match{rankedProviders.length === 1 ? '' : 'es'}
-            </span>
-          </div>
-
-          {request.matchingUsedFallback && (
-            <div className="px-5 py-3 bg-amber-50/90 border-b border-amber-200/70 flex items-center gap-2.5 text-xs text-amber-900">
-              <Info size={16} className="text-amber-600 shrink-0" />
-              <div>
-                <span className="font-semibold">Fallback matching active:</span> No exact category specialist was currently available. Showing closest verified providers in our network.
-              </div>
-            </div>
-          )}
-
-          <div className="divide-y divide-gray-100">
-            {rankedProviders.slice(0, 5).map((rp) => {
-              const rating = rp.ratingAverage ?? rp.provider?.ratingAverage ?? 0;
-              const ratingCount = rp.provider?.ratingCount ?? 0;
-              const jobs = rp.completedJobs ?? rp.provider?.completedJobs ?? 0;
-              const expYears = rp.experienceYears ?? rp.provider?.experienceYears ?? 0;
-
-              return (
-                <div key={rp.provider?._id || rp.provider} className="px-5 py-3.5 flex items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-start gap-3 min-w-0 flex-1">
-                    <Avatar name={rp.provider?.user?.name} color={rp.provider?.user?.avatarColor} size={36} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-semibold text-navy-900">{rp.provider?.user?.name || 'Provider'}</p>
-                        {rp.provider?.verificationStatus === 'verified' && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">
-                            <ShieldCheck size={11} /> Verified Pro
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Explicit ranking stats: rating, completed jobs, experience */}
-                      <div className="flex items-center gap-2.5 mt-1 text-xs text-muted flex-wrap">
-                        <span className="inline-flex items-center gap-1 font-medium text-amber-800 bg-amber-50/80 px-1.5 py-0.5 rounded border border-amber-200/50">
-                          <Star size={11} className="text-amber-500 fill-amber-500" />
-                          {rating > 0 ? rating.toFixed(1) : 'New Pro'}
-                          {ratingCount > 0 && <span className="text-gray-400 font-normal">({ratingCount})</span>}
-                        </span>
-                        <span className="font-medium text-navy-900">
-                          {jobs} {jobs === 1 ? 'job' : 'jobs'} completed
-                        </span>
-                        {expYears > 0 && (
-                          <span>
-                            · {expYears} yrs exp
-                          </span>
-                        )}
-                        {rp.provider?.serviceAreas?.length > 0 && (
-                          <span className="text-gray-400 truncate max-w-[180px]">
-                            · {rp.provider.serviceAreas.join(', ')}
-                          </span>
-                        )}
-                      </div>
-
-                      <p className="text-xs text-muted mt-1 truncate">{(rp.reasons || []).join(' · ')}</p>
-                    </div>
-                  </div>
-
-                  <div className="text-right shrink-0">
-                    <p className="text-[11px] text-muted font-medium">Match score</p>
-                    <p className="font-display text-base font-bold text-[#2F8F5B]">{rp.score}<span className="text-xs text-gray-400 font-normal">/100</span></p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
+        <SmartMatchingCard
+          matches={rankedProviders}
+        />
       )}
 
       <Card>

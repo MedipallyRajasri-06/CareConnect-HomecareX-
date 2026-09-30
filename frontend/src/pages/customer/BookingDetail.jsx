@@ -6,7 +6,11 @@ import { useToast } from '../../context/ToastContext';
 import { Card, Button, Spinner, Avatar, Modal, Textarea, Select } from '../../components/ui';
 import StatusBadge from '../../components/StatusBadge';
 import BookingChat from '../../components/BookingChat';
-import { CheckCircle2, Star, AlertTriangle, Phone, Mail, MessageSquare, Clock } from 'lucide-react';
+import LiveTrackingCard from '../../components/LiveTrackingCard';
+import MaskedCallModal from '../../components/MaskedCallModal';
+import WarrantyCard from '../../components/WarrantyCard';
+import RepeatBookingModal from '../../components/RepeatBookingModal';
+import { CheckCircle2, Star, AlertTriangle, Phone, Mail, MessageSquare, Clock, Navigation, RotateCcw, ShieldCheck, Camera, Video, Lock } from 'lucide-react';
 import { format } from 'date-fns';
 
 function StarPicker({ value = 0, onChange, label = 'rating', size = 26 }) {
@@ -83,7 +87,7 @@ export default function CustomerBookingDetail() {
   const { id } = useParams();
   const toast = useToast();
   const { data: booking, loading, reload } = usePoll(() => bookingsApi.get(id).then((r) => r.data), [id], 6000);
-  const [activeTab, setActiveTab] = useState('chat');
+  const [activeTab, setActiveTab] = useState('tracking');
   const [confirming, setConfirming] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [review, setReview] = useState({ rating: 0, comment: '' });
@@ -91,6 +95,8 @@ export default function CustomerBookingDetail() {
   const [disputeOpen, setDisputeOpen] = useState(false);
   const [dispute, setDispute] = useState({ reason: '', category: 'quality' });
   const [submittingDispute, setSubmittingDispute] = useState(false);
+  const [maskedCallOpen, setMaskedCallOpen] = useState(false);
+  const [repeatOpen, setRepeatOpen] = useState(false);
 
   const openReviewModal = () => {
     setReview({ rating: 0, comment: '' });
@@ -159,15 +165,37 @@ export default function CustomerBookingDetail() {
         <div className="flex-1">
           <p className="font-medium text-navy-900">{booking.provider?.user?.name}</p>
           <div className="flex items-center gap-3 text-xs text-muted mt-1">
-            {booking.provider?.user?.phone && <span className="flex items-center gap-1"><Phone size={12} /> {booking.provider.user.phone}</span>}
-            <span className="flex items-center gap-1"><Mail size={12} /> {booking.provider?.user?.email}</span>
+            <button
+              type="button"
+              onClick={() => setMaskedCallOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200/90 text-xs font-semibold cursor-pointer transition-colors"
+            >
+              <Phone size={12} className="text-emerald-600" />
+              <span>Masked Private Call</span>
+            </button>
+            <span className="flex items-center gap-1 text-slate-500"><Mail size={12} /> {booking.provider?.user?.email}</span>
           </div>
         </div>
         <p className="font-display font-semibold text-lg text-navy-900">₹{booking.price}</p>
       </Card>
 
-      {/* Tabs Switcher: Live Chat & Job Timeline */}
+      {/* Tabs Switcher: Live Tracking, Live Chat & Job Timeline */}
       <div className="flex items-center gap-2 p-1 bg-slate-100/80 rounded-xl border border-slate-200">
+        <button
+          type="button"
+          onClick={() => setActiveTab('tracking')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+            activeTab === 'tracking'
+              ? 'bg-white text-navy-900 shadow-xs border border-slate-200'
+              : 'text-slate-600 hover:text-navy-900'
+          }`}
+        >
+          <Navigation size={14} className={activeTab === 'tracking' ? 'text-emerald-600' : 'text-slate-400'} />
+          <span>Live Tracking</span>
+          {['on_the_way', 'arrived'].includes(booking.status) && (
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
+          )}
+        </button>
         <button
           type="button"
           onClick={() => setActiveTab('chat')}
@@ -178,8 +206,7 @@ export default function CustomerBookingDetail() {
           }`}
         >
           <MessageSquare size={14} className={activeTab === 'chat' ? 'text-[#D98C2B]' : 'text-slate-400'} />
-          <span>Live Chat with Provider</span>
-          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
+          <span>Live Chat</span>
         </button>
         <button
           type="button"
@@ -191,17 +218,28 @@ export default function CustomerBookingDetail() {
           }`}
         >
           <Clock size={14} className={activeTab === 'timeline' ? 'text-[#D98C2B]' : 'text-slate-400'} />
-          <span>Job Timeline ({booking.updates?.length || 0})</span>
+          <span>Timeline ({booking.updates?.length || 0})</span>
         </button>
       </div>
 
-      {activeTab === 'chat' ? (
+      {activeTab === 'tracking' && (
+        <LiveTrackingCard
+          booking={booking}
+          onOpenChat={() => setActiveTab('chat')}
+          onOpenCall={() => setMaskedCallOpen(true)}
+          onStatusUpdated={reload}
+        />
+      )}
+
+      {activeTab === 'chat' && (
         <BookingChat
           bookingId={booking._id}
           otherUser={booking.provider?.user}
           otherRole="Provider"
         />
-      ) : (
+      )}
+
+      {activeTab === 'timeline' && (
         <Card>
           <div className="px-5 py-4 border-b border-gray-100">
             <h2 className="font-display font-semibold text-sm text-navy-900">Job timeline</h2>
@@ -269,22 +307,48 @@ export default function CustomerBookingDetail() {
       )}
 
       {booking.status === 'completed' && (
-        <div className="flex gap-3">
+        <WarrantyCard booking={booking} onClaimSubmitted={reload} />
+      )}
+
+      {booking.status === 'completed' && (
+        <div className="flex flex-wrap gap-3">
+          <Button
+            onClick={() => setRepeatOpen(true)}
+            className="flex-1 bg-[#D98C2B] hover:bg-[#b8731f] text-white"
+          >
+            <RotateCcw size={15} /> Book Again (1-Click Repeat)
+          </Button>
           {!booking.review && (
             <Button variant="outline" className="flex-1" onClick={openReviewModal}>
               <Star size={15} /> Leave a review
             </Button>
           )}
-          <Button variant="outline" className={booking.review ? "w-full" : "flex-1"} onClick={() => setDisputeOpen(true)}>
+          <Button variant="outline" className={booking.review ? "w-full sm:w-auto" : "flex-1"} onClick={() => setDisputeOpen(true)}>
             <AlertTriangle size={15} /> Report an issue
           </Button>
         </div>
       )}
-      {['scheduled', 'in_progress'].includes(booking.status) && (
+      {['scheduled', 'on_the_way', 'arrived', 'in_progress'].includes(booking.status) && (
         <Button variant="outline" onClick={() => setDisputeOpen(true)}>
           <AlertTriangle size={15} /> Report an issue
         </Button>
       )}
+
+      {/* Masked Call Modal */}
+      <MaskedCallModal
+        open={maskedCallOpen}
+        onClose={() => setMaskedCallOpen(false)}
+        bookingId={booking._id}
+        otherUser={booking.provider?.user}
+        otherRole="Provider"
+      />
+
+      {/* Repeat Booking Modal */}
+      <RepeatBookingModal
+        open={repeatOpen}
+        onClose={() => setRepeatOpen(false)}
+        booking={booking}
+      />
 
       <Modal
         open={reviewOpen}

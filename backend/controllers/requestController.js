@@ -9,7 +9,20 @@ const { audit } = require('../services/auditService');
 
 // @route POST /api/requests  (customer)
 const createRequest = asyncHandler(async (req, res) => {
-  const { rawDescription, location, preferredDate, preferredTimeWindow, budgetMax, urgency, photos, categoryOverride } = req.body;
+  const {
+    rawDescription,
+    location,
+    preferredDate,
+    preferredTimeWindow,
+    budgetMax,
+    urgency,
+    photos,
+    media,
+    categoryOverride,
+    preferredProvider,
+    isRepeatBooking,
+    originalBooking,
+  } = req.body;
   if (!rawDescription || rawDescription.trim().length < 5) {
     throw new ApiError(400, 'Please describe the service you need (at least 5 characters).');
   }
@@ -19,6 +32,16 @@ const createRequest = asyncHandler(async (req, res) => {
 
   // --- AI classification step ---
   const classification = aiService.classifyRequest(rawDescription, categories);
+
+  // Normalize media (photos/videos)
+  const normalizedMedia = Array.isArray(media)
+    ? media.map((m) => (typeof m === 'string' ? { url: m, type: m.includes('video') || m.endsWith('.mp4') ? 'video' : 'photo' } : m))
+    : [];
+
+  const legacyPhotos = [
+    ...(Array.isArray(photos) ? photos : []),
+    ...normalizedMedia.map((m) => m.url),
+  ].filter(Boolean);
 
   const request = await ServiceRequest.create({
     customer: req.user._id,
@@ -32,7 +55,11 @@ const createRequest = asyncHandler(async (req, res) => {
     preferredDate,
     preferredTimeWindow,
     budgetMax,
-    photos: photos || [],
+    photos: legacyPhotos,
+    media: normalizedMedia,
+    preferredProvider: preferredProvider || undefined,
+    isRepeatBooking: Boolean(isRepeatBooking),
+    originalBooking: originalBooking || undefined,
     status: 'classified',
   });
 
@@ -81,7 +108,9 @@ const getRequest = asyncHandler(async (req, res) => {
     .populate('customer', 'name email phone avatarColor')
     .populate('category', 'name icon basePrice pricingUnit requiredSkills')
     .populate('aiSuggestedCategory', 'name icon')
-    .populate({ path: 'aiRankedProviders.provider', populate: { path: 'user', select: 'name avatarColor' } });
+    .populate({ path: 'aiRankedProviders.provider', populate: { path: 'user', select: 'name avatarColor phone email' } })
+    .populate({ path: 'preferredProvider', populate: { path: 'user', select: 'name avatarColor phone email' } })
+    .populate('originalBooking');
   if (!request) throw new ApiError(404, 'Service request not found.');
 
   const isOwner = String(request.customer._id) === String(req.user._id);
@@ -195,7 +224,8 @@ const matchProviders = asyncHandler(async (req, res) => {
     .populate('customer', 'name email phone avatarColor')
     .populate('category', 'name icon basePrice pricingUnit requiredSkills')
     .populate('aiSuggestedCategory', 'name icon')
-    .populate({ path: 'aiRankedProviders.provider', populate: { path: 'user', select: 'name avatarColor' } });
+    .populate({ path: 'aiRankedProviders.provider', populate: { path: 'user', select: 'name avatarColor phone email' } })
+    .populate({ path: 'preferredProvider', populate: { path: 'user', select: 'name avatarColor phone email' } });
 
   res.json({
     success: true,

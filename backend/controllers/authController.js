@@ -96,4 +96,63 @@ const changePassword = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Password updated successfully.' });
 });
 
-module.exports = { register, login, getMe, updateMe, changePassword };
+// @desc  Google Sign Up & Sign In
+// @route POST /api/auth/google
+const googleAuth = asyncHandler(async (req, res) => {
+  const { email, name, googleId, picture, role } = req.body;
+  if (!email || !name) {
+    throw new ApiError(400, 'Google account email and name are required.');
+  }
+
+  const lookupEmail = email.toLowerCase().trim();
+  let user = await User.findOne({ email: lookupEmail });
+
+  if (user) {
+    // Existing user - log in
+    if (!user.isActive) throw new ApiError(403, 'This account has been deactivated.');
+    let updated = false;
+    if (googleId && !user.googleId) {
+      user.googleId = googleId;
+      updated = true;
+    }
+    if (picture && !user.avatarUrl) {
+      user.avatarUrl = picture;
+      updated = true;
+    }
+    if (updated) await user.save();
+
+    await audit({ actor: user, action: 'USER_LOGIN_GOOGLE', entityType: 'User', entityId: user._id });
+    const token = generateToken(user);
+    return res.json({ success: true, token, user: user.toSafeObject() });
+  }
+
+  // New user - sign up with Google
+  const allowedSelfSignup = ['customer', 'provider'];
+  const finalRole = allowedSelfSignup.includes(role) ? role : 'customer';
+
+  // Generate random 24-char password for schema safety
+  const randomPass = require('crypto').randomBytes(16).toString('hex') + 'A1!';
+
+  user = await User.create({
+    name: name.trim(),
+    email: lookupEmail,
+    password: randomPass,
+    googleId: googleId || `google_${Date.now()}`,
+    authProvider: 'google',
+    avatarUrl: picture,
+    role: finalRole,
+    avatarColor: randomColor(),
+    isVerified: finalRole === 'customer',
+  });
+
+  if (finalRole === 'provider') {
+    await ProviderProfile.create({ user: user._id, serviceAreas: [] });
+  }
+
+  await audit({ actor: user, action: 'USER_REGISTERED_GOOGLE', entityType: 'User', entityId: user._id });
+
+  const token = generateToken(user);
+  res.status(201).json({ success: true, token, user: user.toSafeObject() });
+});
+
+module.exports = { register, login, googleAuth, getMe, updateMe, changePassword };
