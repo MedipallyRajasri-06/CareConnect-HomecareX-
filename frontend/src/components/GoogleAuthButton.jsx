@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Spinner, Modal, Button } from './ui';
-import { ShieldCheck, UserCheck, Sparkles, Check } from 'lucide-react';
+import { KeyRound, ExternalLink, AlertCircle } from 'lucide-react';
 
 const ROLE_HOME = {
   admin: '/admin',
@@ -12,22 +12,6 @@ const ROLE_HOME = {
   provider: '/provider',
   customer: '/customer',
 };
-
-// Preset demo Google accounts for frictionless 1-click testing & demo
-const DEMO_GOOGLE_PROFILES = [
-  {
-    name: 'Alex Johnson',
-    email: 'alex.johnson@gmail.com',
-    picture: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-    googleId: 'g_alex_johnson_8892',
-  },
-  {
-    name: 'Priyanshu Sharma',
-    email: 'priyanshu.sharma@gmail.com',
-    picture: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
-    googleId: 'g_priyanshu_sharma_1042',
-  },
-];
 
 export default function GoogleAuthButton({
   role = 'customer',
@@ -39,45 +23,147 @@ export default function GoogleAuthButton({
   const toast = useToast();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [customName, setCustomName] = useState('');
-  const [customEmail, setCustomEmail] = useState('');
-  const [selectedRole, setSelectedRole] = useState(role);
+  const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [clientIdInput, setClientIdInput] = useState('');
 
-  const handleGoogleSuccess = async (profile) => {
+  // Priority: 1) Vite env variable 2) LocalStorage runtime override
+  const getGoogleClientId = () => {
+    const envId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (envId && !envId.includes('your-google-client-id') && envId.trim().length > 10) {
+      return envId.trim();
+    }
+    const stored = localStorage.getItem('cc_google_client_id');
+    if (stored && stored.trim().length > 10) {
+      return stored.trim();
+    }
+    return null;
+  };
+
+  // Full-page redirect fallback (used if popup is blocked or requested)
+  const startRedirectOAuth = (clientId) => {
+    const redirectUri = `${window.location.origin}/auth/google/callback`;
+    const state = encodeURIComponent(JSON.stringify({ role, mode, from: window.location.pathname }));
+    const authUrl =
+      `https://accounts.google.com/o/oauth2/v2/auth?` +
+      `client_id=${encodeURIComponent(clientId)}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&response_type=token%20id_token` +
+      `&scope=openid%20email%20profile` +
+      `&prompt=select_account` +
+      `&nonce=${Math.random().toString(36).substring(2)}` +
+      `&state=${state}`;
+
+    window.location.href = authUrl;
+  };
+
+  // Ensure Google Identity Services script is loaded
+  const loadGoogleScript = () => {
+    return new Promise((resolve) => {
+      if (window.google?.accounts?.oauth2) {
+        return resolve(true);
+      }
+      const existing = document.querySelector('script[src*="accounts.google.com/gsi/client"]');
+      if (existing) {
+        existing.addEventListener('load', () => resolve(true), { once: true });
+        existing.addEventListener('error', () => resolve(false), { once: true });
+        // If already loaded in head
+        if (window.google?.accounts) return resolve(true);
+      } else {
+        const script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.defer = true;
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.head.appendChild(script);
+      }
+    });
+  };
+
+  const handleGoogleClick = async () => {
+    const clientId = getGoogleClientId();
+
+    // If client ID is missing, guide the developer/user to set VITE_GOOGLE_CLIENT_ID
+    if (!clientId) {
+      setConfigModalOpen(true);
+      return;
+    }
+
     setLoading(true);
-    setModalOpen(false);
+
     try {
-      const user = await loginWithGoogle({
-        email: profile.email,
-        name: profile.name,
-        picture: profile.picture,
-        googleId: profile.googleId || `g_${Date.now()}`,
-        role: selectedRole || role,
+      const isLoaded = await loadGoogleScript();
+      if (!isLoaded || !window.google?.accounts?.oauth2) {
+        // Fallback to official Google OAuth 2.0 full-page redirect flow
+        startRedirectOAuth(clientId);
+        return;
+      }
+
+      // Initialize official Google Identity Services token client
+      const tokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: 'openid email profile',
+        callback: async (tokenResponse) => {
+          if (tokenResponse.error) {
+            setLoading(false);
+            if (tokenResponse.error === 'access_denied') {
+              toast.info('Google sign-in was cancelled.');
+            } else {
+              toast.error(`Google authentication error: ${tokenResponse.error}`);
+            }
+            return;
+          }
+
+          try {
+            // Verify access token with backend
+            const user = await loginWithGoogle({
+              accessToken: tokenResponse.access_token,
+              role,
+            });
+
+            toast.success(`Signed in with Google as ${user.name}!`);
+            navigate(ROLE_HOME[user.role] || '/customer');
+          } catch (err) {
+            console.error('Backend Google Auth error:', err);
+            toast.error(err.response?.data?.message || 'Google authentication could not be completed.');
+          } finally {
+            setLoading(false);
+          }
+        },
+        error_callback: (err) => {
+          setLoading(false);
+          if (err?.type === 'popup_closed') {
+            toast.info('Google sign-in was cancelled.');
+          } else if (err?.type === 'popup_blocked') {
+            toast.warning('Google sign-in popup was blocked by your browser. Redirecting to Google...');
+            startRedirectOAuth(clientId);
+          } else {
+            console.warn('Google GIS error:', err);
+            // Fallback to full-page redirect
+            startRedirectOAuth(clientId);
+          }
+        },
       });
 
-      toast.success(`Signed in with Google as ${user.name.split(' ')[0]}!`);
-      navigate(ROLE_HOME[user.role] || '/customer');
+      // Prompt real Google account chooser dialog
+      tokenClient.requestAccessToken({ prompt: 'select_account' });
     } catch (err) {
-      console.error('Google auth error:', err);
-      toast.error(err.response?.data?.message || 'Google sign-in could not be completed.');
-    } finally {
-      setLoading(false);
+      console.error('Failed to initialize Google Sign-In:', err);
+      // Fallback directly to full-page redirect
+      startRedirectOAuth(clientId);
     }
   };
 
-  const handleCustomGoogleSubmit = (e) => {
+  const handleSaveClientId = (e) => {
     e.preventDefault();
-    if (!customEmail.trim() || !customName.trim()) {
-      toast.error('Please enter both name and email.');
+    if (!clientIdInput.trim() || clientIdInput.trim().length < 15) {
+      toast.error('Please enter a valid Google Client ID from Google Cloud Console.');
       return;
     }
-    handleGoogleSuccess({
-      name: customName.trim(),
-      email: customEmail.trim().toLowerCase(),
-      picture: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(customName)}`,
-      googleId: `g_${Date.now()}_custom`,
-    });
+    localStorage.setItem('cc_google_client_id', clientIdInput.trim());
+    setConfigModalOpen(false);
+    toast.success('Google Client ID saved! Initiating Google Sign-In...');
+    setTimeout(() => handleGoogleClick(), 300);
   };
 
   return (
@@ -85,7 +171,7 @@ export default function GoogleAuthButton({
       <button
         type="button"
         disabled={loading}
-        onClick={() => setModalOpen(true)}
+        onClick={handleGoogleClick}
         className={`w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 text-slate-700 font-medium text-sm transition-all duration-150 shadow-xs hover:shadow cursor-pointer select-none active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed ${className}`}
       >
         {loading ? (
@@ -115,105 +201,82 @@ export default function GoogleAuthButton({
         </span>
       </button>
 
-      {/* Google Sign-In Selector Modal */}
+      {/* Developer Configuration Modal if Google Client ID is not yet provided */}
       <Modal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title="Sign in with Google"
+        open={configModalOpen}
+        onClose={() => setConfigModalOpen(false)}
+        title="Google OAuth Configuration"
         footer={null}
       >
         <div className="space-y-4">
-          <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-            <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
-            <span>Secure 1-click Google OAuth verification simulated for instant access.</span>
+          <div className="flex items-start gap-3 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs">
+            <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-bold">Google Client ID Required</p>
+              <p className="text-amber-800 leading-relaxed">
+                To initiate real Google OAuth sign-in, add your Google OAuth Client ID to your frontend environment or enter it below.
+              </p>
+            </div>
           </div>
 
-          {/* Account Role Selector if Registering */}
-          {mode === 'register' && (
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700">Account Type</label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedRole('customer')}
-                  className={`p-2.5 rounded-lg text-xs font-medium border text-center transition-all cursor-pointer ${
-                    selectedRole === 'customer'
-                      ? 'bg-amber-50/80 border-[#D98C2B] text-[#925611] font-semibold ring-1 ring-[#D98C2B]'
-                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  Book Services (Customer)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedRole('provider')}
-                  className={`p-2.5 rounded-lg text-xs font-medium border text-center transition-all cursor-pointer ${
-                    selectedRole === 'provider'
-                      ? 'bg-amber-50/80 border-[#D98C2B] text-[#925611] font-semibold ring-1 ring-[#D98C2B]'
-                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  Offer Services (Provider)
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Preset Google Accounts */}
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
-              Choose a Google Account
+          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs text-slate-700">
+            <p className="font-semibold text-navy-900 flex items-center gap-1.5">
+              <KeyRound size={14} className="text-[#D98C2B]" />
+              Setup in Google Cloud Console:
             </p>
-            <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
-              {DEMO_GOOGLE_PROFILES.map((p) => (
-                <button
-                  key={p.email}
-                  type="button"
-                  onClick={() => handleGoogleSuccess(p)}
-                  className="w-full flex items-center gap-3 p-3 hover:bg-slate-50 text-left transition-colors cursor-pointer group"
+            <ol className="list-decimal list-inside space-y-1 text-slate-600">
+              <li>
+                Create an OAuth 2.0 Client ID at{' '}
+                <a
+                  href="https://console.cloud.google.com/apis/credentials"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-amber-700 hover:underline font-medium inline-flex items-center gap-0.5"
                 >
-                  <img
-                    src={p.picture}
-                    alt={p.name}
-                    className="w-9 h-9 rounded-full object-cover border border-slate-200 group-hover:ring-2 group-hover:ring-amber-400 transition-all"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-900 group-hover:text-amber-800 transition-colors">
-                      {p.name}
-                    </p>
-                    <p className="text-xs text-slate-500 truncate">{p.email}</p>
-                  </div>
-                  <Sparkles size={14} className="text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </button>
-              ))}
-            </div>
+                  Google Cloud Console <ExternalLink size={10} />
+                </a>
+              </li>
+              <li>
+                Add to <strong>Authorized JavaScript origins</strong>:
+                <code className="block mt-1 p-1 bg-white border border-slate-200 rounded text-[11px] font-mono text-navy-900">
+                  {window.location.origin}
+                </code>
+              </li>
+              <li>
+                Add to <strong>Authorized redirect URIs</strong>:
+                <code className="block mt-1 p-1 bg-white border border-slate-200 rounded text-[11px] font-mono text-navy-900">
+                  {window.location.origin}/auth/google/callback
+                </code>
+              </li>
+            </ol>
           </div>
 
-          {/* Or Enter Custom Google Email */}
-          <div className="pt-2 border-t border-slate-100">
-            <form onSubmit={handleCustomGoogleSubmit} className="space-y-2.5">
-              <p className="text-xs font-semibold text-slate-700">Or use your own Google account:</p>
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  placeholder="Full Name"
-                  value={customName}
-                  onChange={(e) => setCustomName(e.target.value)}
-                  className="w-full text-xs p-2.5 rounded-lg border border-slate-200 focus:border-[#D98C2B] outline-none"
-                />
-                <input
-                  type="email"
-                  placeholder="you@gmail.com"
-                  value={customEmail}
-                  onChange={(e) => setCustomEmail(e.target.value)}
-                  className="w-full text-xs p-2.5 rounded-lg border border-slate-200 focus:border-[#D98C2B] outline-none"
-                />
-              </div>
-              <Button type="submit" className="w-full text-xs py-2">
-                Continue with Custom Google Account
+          <form onSubmit={handleSaveClientId} className="space-y-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">
+                Paste Google Client ID:
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. 123456789-abc.apps.googleusercontent.com"
+                value={clientIdInput}
+                onChange={(e) => setClientIdInput(e.target.value)}
+                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:border-[#D98C2B] outline-none font-mono"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">
+                You can also add <code className="text-navy-900 font-bold">VITE_GOOGLE_CLIENT_ID</code> to <code className="text-navy-900 font-bold">frontend/.env</code>.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button variant="ghost" type="button" onClick={() => setConfigModalOpen(false)}>
+                Cancel
               </Button>
-            </form>
-          </div>
+              <Button type="submit" disabled={!clientIdInput.trim()}>
+                Save & Continue to Google
+              </Button>
+            </div>
+          </form>
         </div>
       </Modal>
     </>
