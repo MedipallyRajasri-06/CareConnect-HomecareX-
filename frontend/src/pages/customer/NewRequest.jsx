@@ -42,10 +42,10 @@ export default function NewRequest() {
       };
       const res = await requestsApi.create(payload);
       setResult(res);
-      setChosenCategory(res.data.category);
+      setChosenCategory(res.data?.category?._id || res.data?.category || '');
       toast.success('Request submitted — AI classification complete.');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Could not submit request.');
+      toast.error(err.response?.data?.message || err.message || 'Could not submit request.');
     } finally {
       setSubmitting(false);
     }
@@ -54,14 +54,15 @@ export default function NewRequest() {
   const confirmAndMatch = async () => {
     setMatching(true);
     try {
-      if (chosenCategory !== result.data.category) {
+      const currentCatId = result.data?.category?._id || result.data?.category;
+      if (chosenCategory && String(chosenCategory) !== String(currentCatId)) {
         await requestsApi.updateCategory(result.data._id, chosenCategory);
       }
       await requestsApi.match(result.data._id);
       toast.success('Matching providers found!');
       navigate(`/customer/requests/${result.data._id}`);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Could not run matching.');
+      toast.error(err.response?.data?.message || err.message || 'Could not run matching.');
     } finally {
       setMatching(false);
     }

@@ -190,7 +190,7 @@ const matchProviders = asyncHandler(async (req, res) => {
   let pool = candidates;
   let usedFallback = false;
 
-  // 2. Fallback: if no verified candidates match category/skills, restrict fallback strictly to verified & online providers
+  // 2. Fallback: if no verified candidates match category/skills, broaden search to all available verified providers
   if (candidates.length === 0) {
     pool = await ProviderProfile.find({
       verificationStatus: 'verified',
@@ -198,6 +198,22 @@ const matchProviders = asyncHandler(async (req, res) => {
     })
       .populate('user', 'name avatarColor')
       .limit(25);
+
+    if (pool.length === 0) {
+      pool = await ProviderProfile.find({
+        verificationStatus: 'verified',
+      })
+        .populate('user', 'name avatarColor')
+        .limit(25);
+    }
+
+    if (pool.length === 0) {
+      pool = await ProviderProfile.find({})
+        .populate('user', 'name avatarColor')
+        .limit(25);
+    }
+
+    pool = pool.filter((p) => p && p.user);
 
     if (pool.length > 0) {
       usedFallback = true;

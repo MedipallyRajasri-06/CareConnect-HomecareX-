@@ -34,6 +34,7 @@ export const requests = {
   list: (params) => unwrap(api.get('/requests', { params })),
   get: (id) => unwrap(api.get(`/requests/${id}`)),
   updateCategory: (id, categoryId) => unwrap(api.put(`/requests/${id}/category`, { categoryId })),
+  match: (id) => unwrap(api.post(`/requests/${id}/match`)),
   bookProvider: (id, payload) =>
     unwrap(
       api.post(`/requests/${id}/book-provider`, payload).catch((err) => {
@@ -43,6 +44,7 @@ export const requests = {
         return Promise.reject(err);
       })
     ),
+  cancel: (id, reason) => unwrap(api.put(`/requests/${id}/cancel`, { reason })),
   createQuote: (requestId, payload) => unwrap(api.post(`/requests/${requestId}/quotes`, payload)),
   listQuotes: (requestId) => unwrap(api.get(`/requests/${requestId}/quotes`)),
 };
