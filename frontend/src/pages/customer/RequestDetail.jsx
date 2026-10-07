@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { usePoll } from '../../hooks/usePoll';
 import { requests as requestsApi, quotes as quotesApi } from '../../lib/endpoints';
 import { useToast } from '../../context/ToastContext';
-import { Card, Button, Spinner, EmptyState, Modal, Input, Avatar } from '../../components/ui';
+import { Card, Button, Spinner, EmptyState, Modal, Input, Textarea, Avatar } from '../../components/ui';
 import StatusBadge from '../../components/StatusBadge';
 import { Sparkles, MapPin, Calendar, IndianRupee, Star, ShieldCheck, MessageSquare, Info, Camera, Video, Play, Image as ImageIcon, RotateCcw } from 'lucide-react';
 import SmartMatchingCard from '../../components/SmartMatchingCard';
@@ -23,6 +23,16 @@ export default function CustomerRequestDetail() {
   const [acceptModal, setAcceptModal] = useState(null); // quote
   const [scheduleForm, setScheduleForm] = useState({ date: '', start: '', end: '' });
   const [accepting, setAccepting] = useState(false);
+
+  // Direct Provider Booking State
+  const [bookModal, setBookModal] = useState(null); // { profile, match }
+  const [directBookingForm, setDirectBookingForm] = useState({
+    date: '',
+    start: '10:00',
+    end: '12:00',
+    notes: '',
+  });
+  const [bookingDirect, setBookingDirect] = useState(false);
 
   if (loading || !request) {
     return <div className="flex justify-center py-16"><Spinner size={28} /></div>;
@@ -66,6 +76,70 @@ export default function CustomerRequestDetail() {
       toast.error(err.response?.data?.message || 'Could not accept quote.');
     } finally {
       setAccepting(false);
+    }
+  };
+
+  const handleSelectProvider = (profile, matchItem) => {
+    let prefDate = '';
+    if (request.preferredDate) {
+      try {
+        prefDate = format(new Date(request.preferredDate), 'yyyy-MM-dd');
+      } catch {
+        prefDate = format(new Date(Date.now() + 86400000), 'yyyy-MM-dd');
+      }
+    } else {
+      prefDate = format(new Date(Date.now() + 86400000), 'yyyy-MM-dd');
+    }
+
+    let sTime = '10:00';
+    let eTime = '12:00';
+    if (request.preferredTimeWindow) {
+      const tw = request.preferredTimeWindow.toLowerCase();
+      if (tw.includes('morning')) {
+        sTime = '09:00';
+        eTime = '12:00';
+      } else if (tw.includes('afternoon')) {
+        sTime = '13:00';
+        eTime = '16:00';
+      } else if (tw.includes('evening') || tw.includes('4:00') || tw.includes('4-6')) {
+        sTime = '16:00';
+        eTime = '18:00';
+      }
+    }
+
+    setDirectBookingForm({
+      date: prefDate,
+      start: sTime,
+      end: eTime,
+      notes: '',
+    });
+    setBookModal({ profile, match: matchItem });
+  };
+
+  const confirmDirectBooking = async () => {
+    if (!bookModal?.profile) return;
+    setBookingDirect(true);
+    try {
+      const res = await requestsApi.bookProvider(request._id, {
+        providerId: bookModal.profile._id,
+        scheduledDate: directBookingForm.date,
+        scheduledStartTime: directBookingForm.start,
+        scheduledEndTime: directBookingForm.end,
+        notes: directBookingForm.notes,
+      });
+      toast.success(`Service booked with ${bookModal.profile.user?.name || 'the professional'}!`);
+      const newBookingId = res.data?._id;
+      setBookModal(null);
+      reload();
+      if (newBookingId) {
+        navigate(`/customer/bookings/${newBookingId}`);
+      } else {
+        navigate('/customer/bookings');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not complete booking.');
+    } finally {
+      setBookingDirect(false);
     }
   };
 
@@ -180,6 +254,7 @@ export default function CustomerRequestDetail() {
       {rankedProviders.length > 0 && (
         <SmartMatchingCard
           matches={rankedProviders}
+          onSelectProvider={handleSelectProvider}
         />
       )}
 
@@ -239,6 +314,158 @@ export default function CustomerRequestDetail() {
           <div className="grid grid-cols-2 gap-3">
             <Input label="Start time" type="time" value={scheduleForm.start} onChange={(e) => setScheduleForm((f) => ({ ...f, start: e.target.value }))} />
             <Input label="End time" type="time" value={scheduleForm.end} onChange={(e) => setScheduleForm((f) => ({ ...f, end: e.target.value }))} />
+          </div>
+        </div>
+      </Modal>
+
+      {/* Direct Provider Booking Modal */}
+      <Modal
+        open={!!bookModal}
+        onClose={() => setBookModal(null)}
+        title={`Book Service with ${bookModal?.profile?.user?.name || 'Professional'}`}
+        size="lg"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setBookModal(null)}>Cancel</Button>
+            <Button
+              onClick={confirmDirectBooking}
+              disabled={bookingDirect || !directBookingForm.date}
+              className="bg-[#152238] hover:bg-[#D98C2B]"
+            >
+              {bookingDirect ? (
+                <Spinner size={16} className="text-white" />
+              ) : (
+                `Confirm & Book with ${bookModal?.profile?.user?.name?.split(' ')[0] || 'Pro'}`
+              )}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          {/* Provider Profile Summary Card */}
+          {bookModal?.profile && (
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50/80 via-orange-50/40 to-white border border-amber-200/80">
+              <div className="flex items-start gap-3.5">
+                <Avatar
+                  name={bookModal.profile.user?.name || 'Pro'}
+                  color={bookModal.profile.user?.avatarColor}
+                  size={50}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base font-bold text-navy-900">
+                      {bookModal.profile.user?.name}
+                    </h3>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full">
+                      <ShieldCheck size={12} /> Verified Real Professional
+                    </span>
+                    {bookModal.match?.score && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
+                        <Sparkles size={11} /> {bookModal.match.score}% Match
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 text-xs text-slate-600 mt-1.5 flex-wrap">
+                    <span className="flex items-center gap-1 font-semibold text-amber-600">
+                      <Star size={12} className="fill-amber-500" />
+                      {(bookModal.profile.ratingAverage || 5.0).toFixed(1)}★
+                    </span>
+                    <span>•</span>
+                    <span>{bookModal.profile.completedJobs || 12}+ jobs completed</span>
+                    {bookModal.profile.experienceYears > 0 && (
+                      <>
+                        <span>•</span>
+                        <span>{bookModal.profile.experienceYears} yrs experience</span>
+                      </>
+                    )}
+                    {bookModal.profile.serviceAreas?.length > 0 && (
+                      <>
+                        <span>•</span>
+                        <span className="flex items-center gap-1">
+                          <MapPin size={11} className="text-slate-400" />
+                          {bookModal.profile.serviceAreas.join(', ')}
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  {bookModal.profile.skills?.length > 0 && (
+                    <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Skills:</span>
+                      {bookModal.profile.skills.slice(0, 5).map((skill, sIdx) => (
+                        <span
+                          key={sIdx}
+                          className="text-[11px] font-medium text-slate-700 bg-white border border-slate-200 px-2 py-0.5 rounded-md"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {bookModal.profile.bio && (
+                    <p className="text-xs text-slate-600 mt-2 italic">
+                      "{bookModal.profile.bio}"
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Service & Price Overview */}
+          <div className="grid grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs">
+            <div>
+              <p className="text-slate-500 font-medium">Service</p>
+              <p className="text-navy-900 font-bold text-sm mt-0.5">{request.category?.name || 'Service Job'}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-slate-500 font-medium">Estimated Cost</p>
+              <p className="text-emerald-700 font-bold text-base mt-0.5">₹{request.budgetMax || request.category?.basePrice || 499}</p>
+            </div>
+          </div>
+
+          {/* Schedule Form */}
+          <div className="space-y-3.5">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Select Appointment Date & Time
+            </h4>
+            <Input
+              label="Service Date"
+              type="date"
+              required
+              value={directBookingForm.date}
+              onChange={(e) => setDirectBookingForm((f) => ({ ...f, date: e.target.value }))}
+            />
+
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Preferred Start Time"
+                type="time"
+                value={directBookingForm.start}
+                onChange={(e) => setDirectBookingForm((f) => ({ ...f, start: e.target.value }))}
+              />
+              <Input
+                label="Estimated End Time"
+                type="time"
+                value={directBookingForm.end}
+                onChange={(e) => setDirectBookingForm((f) => ({ ...f, end: e.target.value }))}
+              />
+            </div>
+
+            <Textarea
+              label="Special instructions for the professional (optional)"
+              rows={2}
+              placeholder="e.g. Please bring extra piping tools, gate code is 1234"
+              value={directBookingForm.notes}
+              onChange={(e) => setDirectBookingForm((f) => ({ ...f, notes: e.target.value }))}
+            />
+          </div>
+
+          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2">
+            <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
+            <span>Includes 30-Day CareConnect Quality Warranty, verified technician badge, and live GPS tracking upon dispatch.</span>
           </div>
         </div>
       </Modal>

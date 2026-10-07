@@ -35,6 +35,7 @@ export const requests = {
   get: (id) => unwrap(api.get(`/requests/${id}`)),
   updateCategory: (id, categoryId) => unwrap(api.put(`/requests/${id}/category`, { categoryId })),
   match: (id) => unwrap(api.post(`/requests/${id}/match`)),
+  bookProvider: (id, payload) => unwrap(api.post(`/requests/${id}/book-provider`, payload)),
   cancel: (id, reason) => unwrap(api.put(`/requests/${id}/cancel`, { reason })),
   createQuote: (requestId, payload) => unwrap(api.post(`/requests/${requestId}/quotes`, payload)),
   listQuotes: (requestId) => unwrap(api.get(`/requests/${requestId}/quotes`)),

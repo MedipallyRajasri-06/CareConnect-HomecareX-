@@ -129,12 +129,13 @@ async function ensureDefaultCategories() {
       console.log('✅ [AutoSeed] Default admin created: admin@careconnect.dev / password123');
     }
 
-    // Baseline: ensure existing providers (e.g. kavya@gmail.com) are verified and linked to categories
+    // Baseline: ensure all real providers who registered/logged in are active, verified & have categories
     const allCategories = await ServiceCategory.find({ isActive: true });
     const categoryIds = allCategories.map((c) => c._id);
 
-    const pendingProfiles = await ProviderProfile.find({ verificationStatus: 'pending' });
-    for (const profile of pendingProfiles) {
+    const providerProfiles = await ProviderProfile.find({}).populate('user');
+    for (const profile of providerProfiles) {
+      if (!profile.user) continue;
       profile.verificationStatus = 'verified';
       profile.isOnline = true;
       if (!profile.categories || profile.categories.length === 0) {
@@ -147,77 +148,12 @@ async function ensureDefaultCategories() {
         ];
       }
       if (!profile.serviceAreas || profile.serviceAreas.length === 0) {
-        profile.serviceAreas = ['Hyderabad', 'hyd', 'Hasthinapuram', 'Austin', '78701'];
-      } else if (!profile.serviceAreas.some((a) => a.toLowerCase().includes('hyd'))) {
-        profile.serviceAreas.push('Hyderabad', 'hyd', 'Hasthinapuram');
+        profile.serviceAreas = ['Hyderabad', 'hyd', 'Hasthinapuram'];
       }
       await profile.save();
-      console.log(`✅ [AutoSeed] Activated and verified provider profile: ${profile._id}`);
-    }
-
-    // Ensure at least 2 verified providers exist for demo & provider matching fallback
-    const verifiedCount = await ProviderProfile.countDocuments({ verificationStatus: 'verified' });
-    if (verifiedCount < 2) {
-      const demoProviders = [
-        {
-          name: 'Rajesh Sharma',
-          email: 'rajesh.pro@careconnect.dev',
-          city: 'Hyderabad',
-          categories: categoryIds,
-          skills: ['ac repair', 'appliance repair', 'cooling', 'leak repair', 'electrical wiring'],
-          hourlyRate: 400,
-          experienceYears: 7,
-          serviceAreas: ['Hyderabad', 'Hasthinapuram', 'hyd', 'Telangana'],
-          bio: 'Certified AC & home appliance specialist with 7+ years of experience across Hyderabad.',
-        },
-        {
-          name: 'Suresh Kumar',
-          email: 'suresh.pro@careconnect.dev',
-          city: 'Hyderabad',
-          categories: categoryIds,
-          skills: ['plumbing', 'pipe fitting', 'leak diagnostics', 'electrical basics'],
-          hourlyRate: 350,
-          experienceYears: 5,
-          serviceAreas: ['Hyderabad', 'Hasthinapuram', 'hyd', 'Telangana'],
-          bio: 'Master technician for leak troubleshooting, plumbing fixes, and home repairs.',
-        },
-      ];
-
-      for (const dp of demoProviders) {
-        let user = await User.findOne({ email: dp.email });
-        if (!user) {
-          user = await User.create({
-            name: dp.name,
-            email: dp.email,
-            password: 'password123',
-            role: 'provider',
-            isVerified: true,
-            address: { city: dp.city, state: 'Telangana' },
-            avatarColor: '#059669',
-          });
-        }
-        const existingProfile = await ProviderProfile.findOne({ user: user._id });
-        if (!existingProfile) {
-          await ProviderProfile.create({
-            user: user._id,
-            bio: dp.bio,
-            categories: dp.categories,
-            skills: dp.skills,
-            experienceYears: dp.experienceYears,
-            hourlyRate: dp.hourlyRate,
-            serviceAreas: dp.serviceAreas,
-            verificationStatus: 'verified',
-            ratingAverage: 4.9,
-            ratingCount: 28,
-            completedJobs: 35,
-            isOnline: true,
-          });
-        }
-      }
-      console.log('✅ [AutoSeed] Verified demo providers created for instant matching.');
     }
   } catch (err) {
-    console.error('⚠️ [AutoSeed] Warning: failed to ensure default categories/providers:', err.message);
+    console.error('⚠️ [AutoSeed] Warning:', err.message);
   }
 }
 

@@ -1,6 +1,8 @@
 const ServiceRequest = require('../models/ServiceRequest');
 const ServiceCategory = require('../models/ServiceCategory');
 const ProviderProfile = require('../models/ProviderProfile');
+const Booking = require('../models/Booking');
+const Quote = require('../models/Quote');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const aiService = require('../services/aiService');
@@ -121,6 +123,15 @@ const getRequest = asyncHandler(async (req, res) => {
   const isOwner = String(request.customer._id) === String(req.user._id);
   const isStaff = ['admin', 'operations_manager', 'support_agent'].includes(req.user.role);
   if (!isOwner && !isStaff && req.user.role !== 'provider') throw new ApiError(403, 'Not authorized to view this request.');
+
+  // Filter out any stale/deleted providers so only real existing registered providers appear
+  if (request.aiRankedProviders && request.aiRankedProviders.length > 0) {
+    const validMatches = request.aiRankedProviders.filter((rp) => rp.provider && rp.provider.user);
+    if (validMatches.length !== request.aiRankedProviders.length) {
+      request.aiRankedProviders = validMatches;
+      await ServiceRequest.updateOne({ _id: request._id }, { aiRankedProviders: validMatches });
+    }
+  }
 
   res.json({ success: true, data: request });
 });
@@ -259,4 +270,124 @@ const cancelRequest = asyncHandler(async (req, res) => {
   res.json({ success: true, data: request });
 });
 
-module.exports = { createRequest, listRequests, getRequest, updateCategory, matchProviders, cancelRequest };
+// @route POST /api/requests/:id/book-provider (customer directly books a matched provider)
+const directBookProvider = asyncHandler(async (req, res) => {
+  const { providerId, scheduledDate, scheduledStartTime, scheduledEndTime, price: customPrice, notes } = req.body;
+  if (!providerId) throw new ApiError(400, 'Provider ID is required.');
+
+  const request = await ServiceRequest.findById(req.params.id).populate('category');
+  if (!request) throw new ApiError(404, 'Service request not found.');
+
+  const isOwner = String(request.customer) === String(req.user._id);
+  const isStaff = ['admin', 'operations_manager'].includes(req.user.role);
+  if (!isOwner && !isStaff) throw new ApiError(403, 'Not authorized to book for this request.');
+
+  // Find provider profile by profile ID or user ID
+  let providerProfile = await ProviderProfile.findById(providerId).populate('user');
+  if (!providerProfile) {
+    providerProfile = await ProviderProfile.findOne({ user: providerId }).populate('user');
+  }
+  if (!providerProfile) throw new ApiError(404, 'Provider profile not found.');
+
+  // Calculate booking price
+  const price = customPrice || request.budgetMax || (request.category?.basePrice ? request.category.basePrice : 499);
+
+  // Parse scheduling date & times
+  let sDate = scheduledDate ? new Date(scheduledDate) : (request.preferredDate ? new Date(request.preferredDate) : new Date(Date.now() + 86400000));
+  if (isNaN(sDate.getTime())) sDate = new Date(Date.now() + 86400000);
+  const sStart = scheduledStartTime || '10:00';
+  const sEnd = scheduledEndTime || '12:00';
+
+  // Create accepted Quote record
+  const quote = await Quote.create({
+    serviceRequest: request._id,
+    provider: providerProfile._id,
+    price,
+    estimatedDuration: '1-2 hours',
+    message: notes || `Direct booking with ${providerProfile.user?.name || 'verified professional'}.`,
+    status: 'accepted',
+  });
+
+  // Decline any other pending quotes
+  await Quote.updateMany(
+    { serviceRequest: request._id, _id: { $ne: quote._id }, status: 'pending' },
+    { status: 'declined' }
+  );
+
+  // Add booked slot to provider availability
+  providerProfile.availability.push({
+    date: sDate,
+    startTime: sStart,
+    endTime: sEnd,
+    isBooked: true,
+  });
+  const slot = providerProfile.availability[providerProfile.availability.length - 1];
+
+  // Create confirmed Booking
+  const booking = await Booking.create({
+    serviceRequest: request._id,
+    quote: quote._id,
+    customer: req.user._id,
+    provider: providerProfile._id,
+    category: request.category?._id || request.category,
+    scheduledDate: sDate,
+    scheduledStartTime: sStart,
+    scheduledEndTime: sEnd,
+    slotId: slot._id,
+    price,
+    status: 'scheduled',
+    tracking: {
+      status: 'assigned',
+      currentLat: 17.3850,
+      currentLng: 78.4867,
+      destinationLat: 17.3457,
+      destinationLng: 78.5522,
+      distanceKm: 3.5,
+      estimatedArrivalMins: 20,
+      vehicleType: 'Service Van',
+    },
+    warranty: {
+      days: 30,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      status: 'active',
+      claims: [],
+    },
+    updates: [{ status: 'scheduled', note: 'Direct booking confirmed by customer.', updatedBy: req.user._id }],
+  });
+
+  slot.bookingId = booking._id;
+  await providerProfile.save();
+
+  // Update request state
+  request.status = 'scheduled';
+  request.preferredProvider = providerProfile._id;
+  await request.save();
+
+  // Notify provider
+  await notify({
+    user: providerProfile.user._id,
+    type: 'booking_created',
+    title: 'New Service Booking!',
+    message: `You were directly booked by ${req.user.name} for ${request.category?.name || 'Home Service'}!`,
+    link: `/provider/bookings/${booking._id}`,
+  });
+
+  // Notify customer
+  await notify({
+    user: req.user._id,
+    type: 'booking_created',
+    title: 'Booking Confirmed!',
+    message: `Your booking with ${providerProfile.user?.name} is confirmed for ${sDate.toLocaleDateString()}.`,
+    link: `/customer/bookings/${booking._id}`,
+  });
+
+  await audit({ actor: req.user, action: 'DIRECT_BOOKING_CREATED', entityType: 'Booking', entityId: booking._id, details: { provider: providerProfile._id, price } });
+
+  res.status(201).json({
+    success: true,
+    data: booking,
+    message: 'Service booked successfully with selected provider.',
+  });
+});
+
+module.exports = { createRequest, listRequests, getRequest, updateCategory, matchProviders, cancelRequest, directBookProvider };
