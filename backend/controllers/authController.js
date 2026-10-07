@@ -137,6 +137,4 @@ const changePassword = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Password updated successfully.' });
 });
 
-// @desc  Google Sign Up & Sign In (Real Google OAuth verification)
-module.exports = { register, login, googleAuth, getMe, updateMe, changePassword };
 module.exports = { register, login, getMe, updateMe, changePassword };
