@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { Button, Input, Spinner } from '../components/ui';
-import GoogleAuthButton from '../components/GoogleAuthButton';
 
 const ROLE_HOME = {
   admin: '/admin',
@@ -108,20 +107,6 @@ export default function Login() {
             {loading ? <Spinner size={16} className="text-white" /> : 'Sign in'}
           </Button>
         </form>
-
-        <div className="relative my-5">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-slate-200" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white px-2 text-slate-500 font-semibold tracking-wider">
-              Or continue with
-            </span>
-          </div>
-        </div>
-
-        <GoogleAuthButton mode="login" />
-
         <p className="text-sm text-gray-600 mt-6">
           New here?{' '}
           <Link to="/register" className="text-[#D98C2B] font-semibold hover:underline">

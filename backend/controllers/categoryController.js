@@ -8,7 +8,12 @@ const slugify = (s) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replac
 // @route GET /api/categories
 const listCategories = asyncHandler(async (req, res) => {
   const filter = req.query.includeInactive === 'true' ? {} : { isActive: true };
-  const categories = await ServiceCategory.find(filter).sort({ name: 1 });
+  let categories = await ServiceCategory.find(filter).sort({ name: 1 });
+  if (categories.length === 0 && !req.query.includeInactive) {
+    const { ensureDefaultCategories } = require('../services/defaultCategories');
+    await ensureDefaultCategories();
+    categories = await ServiceCategory.find(filter).sort({ name: 1 });
+  }
   res.json({ success: true, data: categories });
 });
 

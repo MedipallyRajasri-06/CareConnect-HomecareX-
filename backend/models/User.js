@@ -12,8 +12,6 @@ const userSchema = new mongoose.Schema(
     role: { type: String, enum: ROLES, default: 'customer', required: true },
     avatarColor: { type: String, default: '#2563eb' },
     avatarUrl: { type: String },
-    googleId: { type: String },
-    authProvider: { type: String, enum: ['local', 'google'], default: 'local' },
     isActive: { type: Boolean, default: true },
     isVerified: { type: Boolean, default: false }, // relevant for providers
     address: {

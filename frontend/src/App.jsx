@@ -7,7 +7,6 @@ import Layout from './components/Layout';
 import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import GoogleCallback from './pages/GoogleCallback';
 import NotFound from './pages/NotFound';
 
 import CustomerDashboard from './pages/customer/Dashboard';
@@ -44,7 +43,6 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
-            <Route path="/auth/google/callback" element={<GoogleCallback />} />
             <Route path="/" element={<LandingPage />} />
 
             {/* Customer */}

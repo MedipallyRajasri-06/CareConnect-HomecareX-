@@ -13,6 +13,13 @@ const connectDB = async () => {
   try {
     await mongoose.connect(uri);
     console.log(`[MongoDB] Connected: ${mongoose.connection.host}/${mongoose.connection.name}`);
+    // Auto-seed default categories & baseline setup if empty
+    try {
+      const { ensureDefaultCategories } = require('../services/defaultCategories');
+      await ensureDefaultCategories();
+    } catch (seedErr) {
+      console.warn('[MongoDB] AutoSeed warning:', seedErr.message);
+    }
   } catch (err) {
     console.error('[MongoDB] Connection error:', err.message);
     process.exit(1);

@@ -3,7 +3,6 @@ import api, { unwrap } from './api';
 export const auth = {
   register: (payload) => unwrap(api.post('/auth/register', payload)),
   login: (payload) => unwrap(api.post('/auth/login', payload)),
-  google: (payload) => unwrap(api.post('/auth/google', payload)),
   me: () => unwrap(api.get('/auth/me')),
   updateMe: (payload) => unwrap(api.put('/auth/me', payload)),
   changePassword: (payload) => unwrap(api.put('/auth/password', payload)),

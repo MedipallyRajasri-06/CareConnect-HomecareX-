@@ -27,7 +27,12 @@ const createRequest = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Please describe the service you need (at least 5 characters).');
   }
 
-  const categories = await ServiceCategory.find({ isActive: true });
+  let categories = await ServiceCategory.find({ isActive: true });
+  if (categories.length === 0) {
+    const { ensureDefaultCategories } = require('../services/defaultCategories');
+    await ensureDefaultCategories();
+    categories = await ServiceCategory.find({ isActive: true });
+  }
   if (categories.length === 0) throw new ApiError(500, 'No service categories configured yet.');
 
   // --- AI classification step ---
