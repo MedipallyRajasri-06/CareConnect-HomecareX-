@@ -39,7 +39,14 @@ export const requests = {
     unwrap(
       api.post(`/requests/${id}/book-provider`, payload).catch((err) => {
         if (err.response?.status === 404) {
-          return api.post('/bookings/direct', { ...payload, requestId: id });
+          return api.post('/bookings/direct', { ...payload, requestId: id }).catch((err2) => {
+            if (err2.response?.status === 404) {
+              const customErr = new Error('The backend deployment is currently updating on Render. Please wait 1-2 minutes and try again.');
+              customErr.response = { data: { message: 'Direct booking service is updating on the server. Please wait 1-2 minutes and try again.' } };
+              return Promise.reject(customErr);
+            }
+            return Promise.reject(err2);
+          });
         }
         return Promise.reject(err);
       })
