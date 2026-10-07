@@ -43,7 +43,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 app.get(['/api/health', '/health'], (req, res) => {
-  res.json({ success: true, message: 'CareConnect API is live 🚀', timestamp: new Date().toISOString() });
+  res.json({ success: true, message: 'CareConnect API is live 🚀', version: '1.1.0', directBooking: true, timestamp: new Date().toISOString() });
 });
 
 // Support both /api/path and /path so requests work regardless of frontend baseURL configuration

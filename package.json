@@ -1,0 +1,10 @@
+{
+  "name": "careconnect-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node backend/server.js",
+    "build": "cd backend && npm install",
+    "install-all": "cd backend && npm install"
+  }
+}

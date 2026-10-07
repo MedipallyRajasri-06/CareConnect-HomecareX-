@@ -270,12 +270,18 @@ const cancelRequest = asyncHandler(async (req, res) => {
   res.json({ success: true, data: request });
 });
 
-// @route POST /api/requests/:id/book-provider (customer directly books a matched provider)
+// @route POST /api/requests/:id/book-provider or POST /api/bookings/direct
 const directBookProvider = asyncHandler(async (req, res) => {
-  const { providerId, scheduledDate, scheduledStartTime, scheduledEndTime, price: customPrice, notes } = req.body;
+  const { providerId, requestId, serviceRequestId, scheduledDate, scheduledStartTime, scheduledEndTime, price: customPrice, notes } = req.body;
   if (!providerId) throw new ApiError(400, 'Provider ID is required.');
 
-  const request = await ServiceRequest.findById(req.params.id).populate('category');
+  const targetRequestId = (req.params.id && req.params.id !== 'direct' && req.params.id !== 'book-provider')
+    ? req.params.id
+    : (requestId || serviceRequestId);
+
+  if (!targetRequestId) throw new ApiError(400, 'Service request ID is required.');
+
+  const request = await ServiceRequest.findById(targetRequestId).populate('category');
   if (!request) throw new ApiError(404, 'Service request not found.');
 
   const isOwner = String(request.customer) === String(req.user._id);

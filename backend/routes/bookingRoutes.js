@@ -14,11 +14,15 @@ const {
 } = require('../controllers/bookingController');
 const { createReview } = require('../controllers/reviewController');
 const { createDispute } = require('../controllers/disputeController');
+const { directBookProvider } = require('../controllers/requestController');
 const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
 router.get('/', protect, listBookings);
+router.post('/direct', protect, authorize('customer'), directBookProvider);
+router.post('/book-provider', protect, authorize('customer'), directBookProvider);
+router.post('/:id/book-provider', protect, authorize('customer'), directBookProvider);
 router.get('/:id', protect, getBooking);
 router.get('/:id/messages', protect, getBookingMessages);
 router.post('/:id/messages', protect, sendBookingMessage);
